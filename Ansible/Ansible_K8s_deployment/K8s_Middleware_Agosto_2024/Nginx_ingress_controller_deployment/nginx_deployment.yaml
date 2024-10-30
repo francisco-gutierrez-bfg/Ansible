@@ -1,0 +1,30 @@
+# Configuración de Cluster Kubernetes con Ansible
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+
+---
+- hosts: workers
+  tasks:
+    - name: Crear el namespace del ingress NGINX
+      command: kubectl apply -f files/namespace.yaml
+      register: result
+      ignore_errors: yes
+      changed_when: "'namespace/ingress-nginx created' in result.stdout or 'namespace/ingress-nginx unchanged' in result.stdout"
+    
+    - name: Aplicar RBAC para el ingress NGINX
+      command: kubectl apply -f files/rbac.yaml
+      register: result
+      ignore_errors: yes
+      changed_when: "'serviceaccount/ingress-nginx created' in result.stdout or 'serviceaccount/ingress-nginx unchanged' in result.stdout or 'clusterrole/ingress-nginx created' in result.stdout or 'clusterrole/ingress-nginx unchanged' in result.stdout or 'clusterrolebinding/ingress-nginx created' in result.stdout or 'clusterrolebinding/ingress-nginx unchanged' in result.stdout"
+    
+    - name: Desplegar el ingress controller NGINX
+      command: kubectl apply -f files/deployment.yaml
+      register: result
+      ignore_errors: yes
+      changed_when: "'deployment.apps/ingress-nginx-controller created' in result.stdout or 'deployment.apps/ingress-nginx-controller unchanged' in result.stdout"
+    
+    - name: Exponer el ingress controller NGINX como LoadBalancer
+      command: kubectl apply -f files/service.yaml
+      register: result
+      ignore_errors: yes
+      changed_when: "'service/ingress-nginx-controller created' in result.stdout or 'service/ingress-nginx-controller unchanged' in result.stdout"
+

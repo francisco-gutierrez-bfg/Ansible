@@ -1,0 +1,38 @@
+---
+- name: Crear contenedor Apache con página personalizada
+  hosts: servidor
+  become: true
+  tasks:
+    - name: Crear directorio para archivos Docker
+      file:
+        path: /opt/docker-apache
+        state: directory
+
+    - name: Crear Dockerfile
+      copy:
+        dest: /opt/docker-apache/Dockerfile
+        content: |
+          FROM httpd:latest
+          COPY index.html /usr/local/apache2/htdocs/
+
+    - name: Crear página personalizada
+      copy:
+        dest: /opt/docker-apache/index.html
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Página de Prueba de Apache</title>
+          </head>
+          <body>
+              <h1>Miguel, Apache funciona</h1>
+              <p>Esta es una página de prueba personalizada para Miguel</p>
+          </body>
+          </html>
+
+    - name: Construir imagen Docker personalizada
+      command: docker build -t custom_apache /opt/docker-apache
+
+    - name: Ejecutar contenedor Apache personalizado
+      command: docker run -d --name apache_server -p 80:80 custom_apache
+

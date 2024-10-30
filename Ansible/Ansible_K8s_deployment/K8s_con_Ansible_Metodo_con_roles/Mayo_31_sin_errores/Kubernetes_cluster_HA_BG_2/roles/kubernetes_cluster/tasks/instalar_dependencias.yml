@@ -1,0 +1,54 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+---
+- name: Instalar Dependencias
+  hosts: all
+  become: true
+
+  tasks:
+
+    - name: Set SELinux to permissive mode
+      command: setenforce 0
+      ignore_errors: true
+
+    - name: Disable SELinux
+      replace:
+        path: /etc/selinux/config
+        regexp: '^SELINUX=enforcing'
+        replace: 'SELINUX=permissive'
+
+    - name: Disable swap
+      command: swapoff -a
+
+    - name: Comment out swap partition in /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(/dev/mapper/.*|UUID=.*)\\s+swap\\s'
+        replace: '#\\1 swap'
+
+    - name: Install dependencies
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+          - net-tools
+          - iproute-tc
+        state: present
+
+    - name: Add Kubernetes repo
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes Repository
+        baseurl: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+        gpgcheck: yes
+        enabled: yes
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+
+    - name: Install kubeadm and kubectl
+      yum:
+        name:
+          - kubeadm
+          - kubectl
+          - kubelet
+        state: present
+

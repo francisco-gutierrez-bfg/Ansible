@@ -1,0 +1,21 @@
+[masters]
+master1 ansible_host=172.16.1.91
+master2 ansible_host=172.16.1.92
+master3 ansible_host=172.16.1.93
+master4 ansible_host=172.16.1.94
+
+[workers]
+worker1 ansible_host=172.16.1.94
+worker2 ansible_host=172.16.1.95
+worker3 ansible_host=172.16.1.96
+worker4 ansible_host=172.16.1.97
+
+[haproxy]
+haproxy ansible_host=172.16.1.95
+
+[kube-cluster:children]
+masters
+haproxy
+
+[all:vars]
+ansible_user=root

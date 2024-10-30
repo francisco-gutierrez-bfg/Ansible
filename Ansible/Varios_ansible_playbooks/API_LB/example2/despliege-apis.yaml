@@ -1,0 +1,32 @@
+---
+- hosts: localhost
+  tasks:
+    - name: Aplicar el despliegue de API1
+      k8s:
+        state: present
+        definition: "{{ lookup('file', './k8s-manifests/api1-deployment.yaml') }}"
+        kubeconfig: ~/.kube/config  # Ruta a tu archivo kubeconfig
+
+    - name: Aplicar el servicio de API1
+      k8s:
+        state: present
+        definition: "{{ lookup('file', './k8s-manifests/api1-service.yaml') }}"
+        kubeconfig: ~/.kube/config  # Ruta a tu archivo kubeconfig
+
+    - name: Aplicar el despliegue de API2
+      k8s:
+        state: present
+        definition: "{{ lookup('file', './k8s-manifests/api2-deployment.yaml') }}"
+        kubeconfig: ~/.kube/config  # Ruta a tu archivo kubeconfig
+
+    - name: Aplicar el servicio de API2
+      k8s:
+        state: present
+        definition: "{{ lookup('file', './k8s-manifests/api2-service.yaml') }}"
+        kubeconfig: ~/.kube/config  # Ruta a tu archivo kubeconfig
+
+    - name: Aplicar el recurso Ingress
+      k8s:
+        state: present
+        definition: "{{ lookup('file', './k8s-manifests/ingress-lb.yaml') }}"
+        kubeconfig: ~/.kube/config  # Ruta a tu archivo kubeconfig

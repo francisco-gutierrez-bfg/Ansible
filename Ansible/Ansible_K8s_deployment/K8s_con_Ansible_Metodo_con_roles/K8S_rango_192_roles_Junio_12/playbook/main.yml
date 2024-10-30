@@ -1,0 +1,13 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+---
+- name: Instalando y configurando Kubernetes
+  hosts: all
+  become: yes
+  roles:
+    - dependencias
+    - containerd
+    - firewalld
+    - haproxy
+    - keepalived
+    - kubernetes
+    - metallb

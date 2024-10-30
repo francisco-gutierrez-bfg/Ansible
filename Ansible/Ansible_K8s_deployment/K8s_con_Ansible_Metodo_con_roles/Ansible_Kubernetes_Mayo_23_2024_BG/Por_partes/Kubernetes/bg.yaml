@@ -1,0 +1,26 @@
+- hosts: all
+  become: yes
+  roles:
+    - common
+    - kubernetes
+    - calico
+
+- hosts: masters
+  become: yes
+  roles:
+    - kubernetes
+  tasks:
+    - include_tasks: tasks/initialize-master.yml
+
+- hosts: masters
+  become: yes
+  tasks:
+    - include_tasks: tasks/join-masters.yml
+
+- hosts: workers
+  become: yes
+  roles:
+    - kubernetes
+  tasks:
+    - include_tasks: tasks/join-workers.yml
+

@@ -1,0 +1,162 @@
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+- name: Configuración de nodos Kubernetes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configurar SELinux en modo permisivo
+      command: setenforce 0
+      ignore_errors: true
+
+    - name: Deshabilitar SELinux
+      replace:
+        path: /etc/selinux/config
+        regexp: '^SELINUX=enforcing'
+        replace: 'SELINUX=permissive'
+
+    - name: Deshabilitar swap desde línea de comandos
+      command: swapoff -a
+
+    - name: Deshabilitar swap desde /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(/dev/mapper/.*|UUID=.*)\s+swap\s'
+        replace: '#\1 swap'
+
+    - name: Habilitar módulo br_netfilter
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Verificar que net.bridge.bridge-nf-call-iptables esté en 1
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Verificar que net.ipv4.ip_forward esté en 1
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Verificar que el servicio firewalld esté habilitado
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Remover configuraciones existentes de Kubernetes (en caso de reconfiguración)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+        - /etc/kubernetes/manifests/kube-controller-manager.yaml
+        - /etc/kubernetes/manifests/kube-scheduler.yaml
+        - /etc/kubernetes/manifests/etcd.yaml
+        - /var/lib/etcd
+        - /joincluster_master.sh
+        - /joincluster_worker.sh
+
+    - name: Reiniciar servicio containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+    - name: Habilitar servicio kubelet
+      systemd:
+        name: kubelet
+        enabled: yes
+
+    - name: Iniciar servicio kubelet
+      systemd:
+        name: kubelet
+        state: started
+
+    - name: Permitir puertos necesarios de Kubernetes en el firewall
+      firewalld:
+        port: "{{ item }}"
+        state: enabled
+        permanent: yes
+      loop:
+        - 6443/tcp
+        - 8443/tcp
+        - 2379-2380/tcp
+        - 10250-10252/tcp
+        - 10255/tcp
+
+    - name: Recargar firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+    - name: Configurar kubelet para que utilice la versión correcta de la imagen de pause
+      lineinfile:
+        path: /etc/default/kubelet
+        regexp: '^(\s*KUBELET_EXTRA_ARGS\s*=).*$'
+        line: 'KUBELET_EXTRA_ARGS=--container-runtime=remote --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --image-pull-progress-deadline=2m --kubelet-cgroups=/systemd/system.slice --runtime-request-timeout=15m --cgroup-driver=systemd --pause-image=registry.k8s.io/pause:3.9'
+
+    - name: Verificar que el directorio de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet
+        state: directory
+
+    - name: Verificar que el archivo de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet/config.yaml
+        state: touch
+
+- name: Configuración nodo maestro principal
+  hosts: master1
+  become: yes
+  vars:
+    kubeadm_control_plane_command_file: "/tmp/kubeadm_control_plane_command.txt"  # File to store the control plane join command
+    kubeadm_worker_command_file: "/tmp/kubeadm_worker_command.txt"  # File to store the worker node join command
+    kubeadm_init_file: "/tmp/kubeadm_init_output.txt"  # File to store the init command output
+  
+  tasks:
+    - name: Inicializar cluster de Kubernetes
+      command: kubeadm init --control-plane-endpoint "192.168.0.35:8443" --upload-certs --pod-network-cidr=10.244.0.0/16 --cri-socket /var/run/containerd/containerd.sock --ignore-preflight-errors=all
+      register: kubeadm_init
+      failed_when: "'timed out waiting for the condition' in kubeadm_init.stderr"
+      changed_when: "'timed out waiting for the condition' not in kubeadm_init.stderr"
+
+    - name: Save init command output to a file
+      copy:
+        content: "{{ kubeadm_init.stdout_lines | join('\n') }}"
+        dest: "{{ kubeadm_init_file }}"
+        mode: '0644'
+
+    - name: Extract kubeadm control plane join command
+      command: "grep -oP 'kubeadm join .*' {{ kubeadm_init_file }} | grep control-plane"
+      register: kubeadm_control_plane_output
+      changed_when: false
+
+    - name: Save kubeadm control plane join command to a file
+      copy:
+        content: "{{ kubeadm_control_plane_output.stdout_lines[0] }}"
+        dest: "{{ kubeadm_control_plane_command_file }}"
+        mode: '0644'
+
+    - name: Display kubeadm control plane join command
+      debug:
+        msg: "Kubeadm Control Plane Join Command: {{ kubeadm_control_plane_output.stdout_lines[0] }}"
+
+    - name: Extract kubeadm worker join command
+      command: "grep -oP 'kubeadm join .*' {{ kubeadm_init_file }} | grep 'kubeadm join'"
+      register: kubeadm_worker_output
+      changed_when: false
+
+    - name: Save kubeadm worker join command to a file
+      copy:
+        content: "{{ kubeadm_worker_output.stdout_lines[0] }}"
+        dest: "{{ kubeadm_worker_command_file }}"
+        mode: '0644'
+
+    - name: Display kubeadm worker join command
+      debug:
+        msg: "Kubeadm Worker Join Command: {{ kubeadm_worker_output.stdout_lines[0] }}"
+

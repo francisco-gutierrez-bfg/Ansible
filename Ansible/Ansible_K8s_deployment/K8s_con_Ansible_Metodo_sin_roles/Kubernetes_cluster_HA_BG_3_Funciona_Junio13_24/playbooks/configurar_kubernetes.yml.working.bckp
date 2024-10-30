@@ -1,0 +1,237 @@
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+- name: Configuración de nodos Kubernetes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configurar SELinux en modo permisivo
+      command: setenforce 0
+      ignore_errors: true
+
+    - name: Deshabilitar SELinux
+      replace:
+        path: /etc/selinux/config
+        regexp: '^SELINUX=enforcing'
+        replace: 'SELINUX=permissive'
+
+    - name: Deshabilitar swap desde línea de comandos
+      command: swapoff -a
+
+    - name: Deshabilitar swap desde /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(/dev/mapper/.*|UUID=.*)\s+swap\s'
+        replace: '#\1 swap'
+
+    - name: Habilitar módulo br_netfilter
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Verificar que net.bridge.bridge-nf-call-iptables esté en 1
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Verificar que net.ipv4.ip_forward esté en 1
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Verificar que el servicio firewalld esté habilitado
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Remover configuraciones existentes de Kubernetes (en caso de reconfiguración)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+        - /etc/kubernetes/manifests/kube-controller-manager.yaml
+        - /etc/kubernetes/manifests/kube-scheduler.yaml
+        - /etc/kubernetes/manifests/etcd.yaml
+        - /var/lib/etcd
+        - /joincluster_master.sh
+        - /joincluster_worker.sh
+
+    - name: Reiniciar servicio containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+    - name: Habilitar servicio kubelet
+      systemd:
+        name: kubelet
+        enabled: yes
+
+    - name: Iniciar servicio kubelet
+      systemd:
+        name: kubelet
+        state: started
+
+    - name: Permitir puertos necesarios de Kubernetes en el firewall
+      firewalld:
+        port: "{{ item }}"
+        state: enabled
+        permanent: yes
+      loop:
+        - 6443/tcp
+        - 8443/tcp
+        - 2379-2380/tcp
+        - 10250-10252/tcp
+        - 10255/tcp
+
+    - name: Recargar firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+    - name: Configurar kubelet para que utilice la versión correcta de la imagen de pause
+      lineinfile:
+        path: /etc/default/kubelet
+        regexp: '^(\s*KUBELET_EXTRA_ARGS\s*=).*$'
+        line: 'KUBELET_EXTRA_ARGS=--container-runtime=remote --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --image-pull-progress-deadline=2m --kubelet-cgroups=/systemd/system.slice --runtime-request-timeout=15m --cgroup-driver=systemd --pause-image=registry.k8s.io/pause:3.9'
+
+
+    - name: Verificar que el directorio /root/.kube/config exista
+      file:
+        path: /root/.kube
+        state: directory
+
+    - name: Verificar que el directorio de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet
+        state: directory
+
+    - name: Verificar que el archivo de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet/config.yaml
+        state: touch
+
+- name: Configuración nodo maestro principal
+  hosts: master1
+  become: yes
+  tasks:
+    - name: Inicializar cluster de Kubernetes
+      command: kubeadm init --control-plane-endpoint "192.168.0.35:8443" --apiserver-advertise-address=192.168.0.35 --upload-certs --pod-network-cidr=10.244.0.0/16 --cri-socket /var/run/containerd/containerd.sock --ignore-preflight-errors=all
+      #      command: kubeadm init --control-plane-endpoint "192.168.0.35:8443" --upload-certs --pod-network-cidr=10.244.0.0/16 --cri-socket /var/run/containerd/containerd.sock --ignore-preflight-errors=all
+      register: kubeadm_init
+      failed_when: "'timed out waiting for the condition' in kubeadm_init.stderr"
+      changed_when: "'timed out waiting for the condition' not in kubeadm_init.stderr"
+
+    - name: Initialize Kubernetes cluster on first master node
+      shell: |
+        cat /etc/kubernetes/admin.conf > /root/.kube/config
+      args:
+        creates: /root/.kube/config
+      when: inventory_hostname == groups['masters'][0]
+
+    - name: Guardar comando kubeadm join para los nodos master
+      shell: |
+        kubeadm token create --print-join-command --certificate-key $(kubeadm certs certificate-key) > /joincluster_master.sh
+        chmod +x /joincluster_master.sh
+      args:
+        creates: /joincluster_master.sh
+
+    - name: Guardar comando kubeadm join para los nodos worker
+      shell: |
+        kubeadm token create --print-join-command > /joincluster_worker.sh
+        chmod +x /joincluster_worker.sh
+      args:
+        creates: /joincluster_worker.sh
+
+    - name: Esperar hasta que el servicio de Kubernetes API server esté listo
+      uri:
+        url: "https://192.168.0.35:8443/healthz"
+        validate_certs: no
+      register: api_server_ready
+      until: api_server_ready.status == 200
+      retries: 60
+      delay: 10
+      ignore_errors: yes
+
+        #    - name: Aplicar manifest de anonymous-admin ClusterRoleBinding
+        #command: kubectl apply -f /tmp/anonymous-admin.yaml --validate=false --kubeconfig /root/.kube/config
+        #register: crb_result
+        #changed_when: crb_result.rc == 0
+
+    - name: Instalar Calico CNI
+      become: yes
+      command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml --validate=false --kubeconfig /root/.kube/config
+      when: kubeadm_init is changed
+
+    - name: Reiniciar servicio containerd después de instalar Calico
+      systemd:
+        name: containerd
+        state: restarted
+
+    - name: Copiar manifest de anonymous-admin.yaml en los nodos
+      copy:
+        src: files/anonymous-admin.yaml
+        dest: /tmp/anonymous-admin.yaml
+
+- name: Configuración nodos maestros secundarios
+  hosts: masters:!master1
+  become: yes
+  tasks:
+    - name: Verificar que el directorio de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet
+        state: directory
+
+    - name: Verificar que el archivo de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet/config.yaml
+        state: touch
+
+    - name: Obtener comando join desde el nodo master1 para los nodos master secundarios
+      shell: cat /joincluster_master.sh
+      register: join_command
+      delegate_to: master1
+      when: inventory_hostname != 'master1'
+
+    - name: Unir nodos master secundarios al cluster de Kubernetes
+      command: "{{ join_command.stdout }} --v=5"
+      register: join_output
+      failed_when: "'connection refused' in join_output.stderr"
+
+    - name: Crear directorio /root/.kube/ si no existe
+      file:
+        path: /root/.kube
+        state: directory
+
+- name: Configuración nodos de trabajo
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Verificar que el directorio de kubelet exista
+      file:
+        path: /var/lib/kubelet
+        state: directory
+
+    - name: Verificar que el archivo de configuración de kubelet exista
+      file:
+        path: /var/lib/kubelet/config.yaml
+        state: touch
+
+    - name: Obtener comando join desde el nodo master1 para los nodos worker
+      shell: cat /joincluster_worker.sh
+      register: join_command
+      delegate_to: master1
+
+    - name: Crear directorio /root/.kube/ si no existe
+      file:
+        path: /root/.kube
+        state: directory
+
+    - name: Unir nodos worker al cluster de Kubernetes
+      command: "{{ join_command.stdout }} --v=5"
+      register: join_output
+      failed_when: "'connection refused' in join_output.stderr"

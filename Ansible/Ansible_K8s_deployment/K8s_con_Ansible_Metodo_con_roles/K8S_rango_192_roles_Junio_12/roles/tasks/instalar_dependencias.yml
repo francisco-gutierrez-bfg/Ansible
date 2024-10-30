@@ -1,0 +1,73 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+---
+- name: Instalar Dependencias
+  hosts: all
+  become: true
+
+  tasks:
+
+    - name: Parametrizando SELinux a modo  permisivo
+      command: setenforce 0
+      ignore_errors: true
+
+    - name: Deshabilitar SELinux
+      replace:
+        path: /etc/selinux/config
+        regexp: '^SELINUX=enforcing'
+        replace: 'SELINUX=permissive'
+
+    - name: Deshabilitar swap
+      command: swapoff -a
+
+    - name: Deshabilitar swap permanentemente
+      replace:
+        path: /etc/fstab
+        regexp: '^(\s*)([^#\n]+\s+)(\w+\s+)swap(\s+.*)$'
+        replace: '#\1\2\3swap\4'
+        backup: yes
+
+    - name: Instalaar pre-requisitos del sistema operativo
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+          - net-tools
+          - iproute-tc
+        state: present
+
+    - name: Agregar repositorio de Kubernetes
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes Repository
+        baseurl: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+        gpgcheck: yes
+        enabled: yes
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+
+    - name: Instalar kubeadm, kubelet y kubectl
+      yum:
+        name:
+          - kubeadm
+          - kubectl
+          - kubelet
+        state: present
+
+    - name: Habilitar módulo br_netfilter
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Verificar que net.bridge.bridge-nf-call-iptables esté en 1
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Verificar que net.ipv4.ip_forward esté en 1
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes

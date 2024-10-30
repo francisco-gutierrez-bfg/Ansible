@@ -1,0 +1,13 @@
+[masters]
+master1 ansible_host=172.16.1.91
+master2 ansible_host=172.16.1.92
+master3 ansible_host=172.16.1.93
+
+[workers]
+worker1 ansible_host=172.16.1.101
+worker2 ansible_host=172.16.1.102
+worker3 ansible_host=172.16.1.103
+worker4 ansible_host=172.16.1.104
+
+[all:vars]
+ansible_user=root

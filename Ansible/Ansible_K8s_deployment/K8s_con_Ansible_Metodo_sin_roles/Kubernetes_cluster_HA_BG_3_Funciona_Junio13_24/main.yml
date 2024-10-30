@@ -1,0 +1,12 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+---
+  hosts: all
+  become: yes
+  roles:
+    - role: dependencias
+    - role: containerd
+    - role: firewalld
+    - role: haproxy
+    - role: keepalived
+    - role: kubernetes
+    - role: metallb

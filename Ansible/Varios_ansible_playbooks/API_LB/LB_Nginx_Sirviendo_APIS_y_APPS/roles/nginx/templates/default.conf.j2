@@ -1,0 +1,86 @@
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+
+## Upstreams para las APIs ##
+upstream api1 {
+    server api1-service.default.svc.cluster.local:8080;
+    server api1-service-2.default.svc.cluster.local:8080;
+}
+
+#upstream api2 {
+#    server api2-service.default.svc.cluster.local:8080;
+#    server api2-service-2.default.svc.cluster.local:8080;
+#}
+
+## Upstreams para las aplicaciones ##
+upstream app1 {
+    server app1-service.default.svc.cluster.local:80;
+    server app1-service-2.default.svc.cluster.local:80;
+}
+
+#upstream app2 {
+#    server app2-service.default.svc.cluster.local:80;
+#    server app2-service-2.default.svc.cluster.local:80;
+#}
+
+## Configurar servidor Nginx como balanceador de carga ##
+server {
+    listen 80;
+
+    # Ruta para la primera API
+    location /api1/ {
+        proxy_pass http://api1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Ruta para la segunda API
+    #location /api2/ {
+    #    proxy_pass http://api2;
+    #    proxy_set_header Host $host;
+    #    proxy_set_header X-Real-IP $remote_addr;
+    #    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    #}
+
+    # Ruta para la primera aplicación
+    location /app1/ {
+        proxy_pass http://app1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Ruta para la segunda aplicación
+    #location /app2/ {
+    #    proxy_pass http://app2;
+    #    proxy_set_header Host $host;
+    #    proxy_set_header X-Real-IP $remote_addr;
+    #    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    #}
+
+    ## Configuraciones adicionales segun sea necesario
+    access_log /var/log/nginx/app_access.log;
+    error_log /var/log/nginx/app_error.log;
+
+    # Configurar de cache para mejorar el rendimiento
+    # proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=my_cache:10m max_size=10g inactive=60m use_temp_path=off;
+    # proxy_cache my_cache;
+    proxy_cache_valid 200 301 302 5m;
+    proxy_cache_valid 404 1m;
+
+    # Configurar timeouts
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+    send_timeout 60s;
+
+    # Habilitar gzip para mejorar la velocidad de transferencia
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    gzip_min_length 1000;
+    gzip_comp_level 6;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_buffers 16 8k;
+    gzip_disable "MSIE [1-6]\.(?!.*SV1)";
+}

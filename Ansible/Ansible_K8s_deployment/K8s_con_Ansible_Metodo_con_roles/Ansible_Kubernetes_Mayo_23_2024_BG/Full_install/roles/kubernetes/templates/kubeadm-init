@@ -1,0 +1,19 @@
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+kubernetesVersion: "{{ kubernetes_version }}"
+controlPlaneEndpoint: "{{ control_plane_endpoint }}"
+apiServer:
+  certSANs:
+    - "{{ groups['masters'][0] }}"
+    - "{{ control_plane_endpoint }}"
+  extraArgs:
+    advertise-address: "{{ ansible_default_ipv4.address }}"
+    secure-port: "{{ secure_port }}"
+  timeoutForControlPlane: "{{ timeout_for_control_plane }}"
+  extraVolumes:
+    - hostPath: /etc/kubernetes/pki
+      mountPath: /etc/kubernetes/pki
+      name: etcd-certs
+
+networking:
+  podSubnet: "{{ pod_subnet }}"

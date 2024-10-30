@@ -1,0 +1,29 @@
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: stable
+controlPlaneEndpoint: "{{ control_plane_endpoint }}"
+networking:
+  podSubnet: "{{ pod_network_cidr }}"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "{{ ansible_host }}"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: /run/containerd/containerd.sock
+  kubeletExtraArgs:
+    node-ip: "{{ ansible_host }}"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: "{{ control_plane_endpoint }}"
+    token: "{{ bootstrap_token }}"
+    caCertHashes:
+      - "sha256:{{ ca_cert_hash }}"
+nodeRegistration:
+  criSocket: /run/containerd/containerd.sock
+

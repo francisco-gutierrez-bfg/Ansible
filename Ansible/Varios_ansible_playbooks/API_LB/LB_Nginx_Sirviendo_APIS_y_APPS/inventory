@@ -1,0 +1,14 @@
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+all:
+  children:
+    workers:
+      hosts:
+        worker1:
+          ansible_host: worker1.example.com
+        worker2:
+          ansible_host: worker2.example.com
+        worker3:
+          ansible_host: worker3.example.com
+        worker4:
+          ansible_host: worker4.example.com
+

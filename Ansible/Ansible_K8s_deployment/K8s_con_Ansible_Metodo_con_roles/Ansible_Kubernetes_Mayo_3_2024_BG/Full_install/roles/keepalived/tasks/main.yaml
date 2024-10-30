@@ -1,0 +1,38 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+- name: Instalar Keepalived
+  yum:
+    name: keepalived
+    state: present
+
+- name: Crear el script para chequeo de HAProxy
+  template:
+    src: check_haproxy.sh.j2
+    dest: /etc/keepalived/check_haproxy.sh
+    mode: '0755'
+
+- name: Configurar Keepalived
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+
+- name: Enable and start Keepalived
+  systemd:
+    name: keepalived
+    state: started
+    enabled: yes
+
+- name: Copy HAProxy monitoring script
+  copy:
+    src: ../files/check_haproxy.sh
+    dest: /usr/local/bin/check_haproxy.sh
+    mode: '0755'
+
+- name: Monitor HAProxy and restart Keepalived if necessary
+  copy:
+    src: ../files/haproxy_keepalived.sh
+    dest: /usr/local/bin/haproxy_keepalived.sh
+    mode: '0755'
+  systemd:
+    name: haproxy_keepalived
+    enabled: yes
+    state: started

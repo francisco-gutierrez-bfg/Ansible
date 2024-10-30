@@ -1,0 +1,75 @@
+---
+- name: Install and Configure Containerd and Kubelet on Red Hat 9.3
+  hosts: all
+  become: true
+  tasks:
+    - name: Disable swap
+      command: swapoff -a
+      ignore_errors: yes
+
+    - name: Comment out swap entries in /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(\s*[^#]+\s+swap\s+)(defaults.*)$'
+        replace: '# \1\2'
+        backup: yes
+
+    - name: Add Containerd YUM repository
+      yum_repository:
+        name: containerd
+        description: Containerd YUM repo
+        baseurl: https://download.docker.com/linux/centos/7/x86_64/stable
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+        state: present
+
+    - name: Install Containerd
+      yum:
+        name: containerd
+        state: present
+
+    - name: Copy Containerd configuration
+      copy:
+        src: files/containerd-config.toml
+        dest: /etc/containerd/config.toml
+      notify: Restart Containerd
+
+    - name: Set SystemdCgroup in Containerd configuration
+      lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '^\s*SystemdCgroup\s*=\s*false'
+        line: '            SystemdCgroup = true'
+        insertafter: '^\s*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
+      notify: Restart Containerd
+
+    - name: Configure kubelet to use Containerd
+      lineinfile:
+        path: /etc/default/kubelet
+        create: yes
+        line: 'KUBELET_EXTRA_ARGS="--container-runtime=remote --container-runtime-endpoint=unix:///run/containerd/containerd.sock --runtime-cgroups=/system.slice/containerd.service --kubelet-cgroups=/system.slice/kubelet.service"'
+      notify: Restart kubelet
+
+    - name: Ensure Containerd is started and enabled
+      systemd:
+        name: containerd
+        state: started
+        enabled: yes
+
+    - name: Ensure kubelet is started and enabled
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart Containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        enabled: yes

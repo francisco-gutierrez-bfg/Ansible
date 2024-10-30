@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api2-deployment
+  labels:
+    app: api2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api2
+  template:
+    metadata:
+      labels:
+        app: api2
+    spec:
+      containers:
+      - name: api2-container
+        image: imagen-del-api2:tag  # Reemplazar con la imagen y etiqueta del API2
+        ports:
+        - containerPort: 8080  # Reemplazar con el puerto del contenedor del API2

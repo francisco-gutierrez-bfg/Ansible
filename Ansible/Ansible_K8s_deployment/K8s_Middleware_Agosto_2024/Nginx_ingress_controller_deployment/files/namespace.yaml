@@ -1,0 +1,8 @@
+# Configuración de Cluster Kubernetes con Ansible
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx

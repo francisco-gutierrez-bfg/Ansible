@@ -1,0 +1,38 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+---
+- name: Deploy Keepalived with HAProxy
+  hosts: masters
+  become: true
+
+  tasks:
+    - name: Install Keepalived
+      ansible.builtin.package:
+        name: keepalived
+        state: present
+
+    - name: Configure Keepalived
+      ansible.builtin.template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+      notify:
+        - Restart Keepalived
+
+    - name: Copy HAProxy monitoring script
+      ansible.builtin.template:
+        src: check_haproxy.sh
+        dest: /usr/local/bin/check_haproxy.sh
+        mode: '0755'
+
+    - name: Start and enable Keepalived service
+      ansible.builtin.systemd:
+        name: keepalived
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart Keepalived
+      ansible.builtin.systemd:
+        name: keepalived
+        state: restarted
+        enabled: yes
+

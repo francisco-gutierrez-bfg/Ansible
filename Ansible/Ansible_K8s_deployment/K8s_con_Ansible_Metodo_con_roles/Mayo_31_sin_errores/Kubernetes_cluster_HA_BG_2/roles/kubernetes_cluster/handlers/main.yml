@@ -1,0 +1,11 @@
+# handlers/main.yml
+- name: restart firewalld
+  systemd:
+    name: firewalld
+    state: restarted
+
+- name: Reiniciar containerd
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: yes

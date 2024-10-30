@@ -1,0 +1,38 @@
+- hosts: haproxy
+  become: yes
+  tasks:
+    - name: Install HAProxy
+      package:
+        name: haproxy
+        state: present
+
+    - name: Configure HAProxy
+      template:
+        src: haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+      notify:
+        - Restart HAProxy
+
+    - name: Enable HAProxy service
+      systemd:
+        name: haproxy
+        enabled: yes
+        state: started
+
+    - name: Ensure firewalld allows HAProxy
+      firewalld:
+        service: http
+        state: enabled
+        permanent: yes
+        immediate: yes
+
+    - name: Restart firewalld to apply changes
+      systemd:
+        name: firewalld
+        state: restarted
+
+  handlers:
+    - name: Restart HAProxy
+      systemd:
+        name: haproxy
+        state: restarted

@@ -1,0 +1,61 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+
+---
+- name: Configuración de nodos Kubernetes
+  hosts: all
+  become: yes
+  roles:
+    - common
+
+- name: Configuración nodo maestro principal
+  hosts: master1
+  become: yes
+  vars:
+    kubeadm_init_output_file: "/tmp/kubeadm_init_output.txt"
+  roles:
+    - init
+    - master
+    - haproxy
+    - keepalived
+    - metallb
+
+- name: Trasladar instrucciones de union al cluster para nodos control plane secundarios
+  hosts: master1
+  become: yes
+  tasks:
+    - name: Estableciendo origen y destino de los scripts
+      ansible.builtin.fetch:
+        src: /joincluster_master.sh
+        dest: /joincluster_master.sh
+        flat: yes
+
+    - name: Verificando permisos de los scripts
+      ansible.builtin.file:
+        path: /joincluster_master.sh
+        mode: '0765'
+
+- name: Parametrizando control planes secundarios
+  hosts: masters
+  become: yes
+  tasks:
+    - name: Enviando script de unión de control planes secundarios desde control plane principal (master1)
+      ansible.builtin.copy:
+        src: /joincluster_master.sh
+        dest: /joincluster_master.sh
+        owner: root
+        group: root
+        mode: '0765'
+      when: inventory_hostname != 'master1'
+
+- name: Configuración control planes secundarios
+  hosts: masters:!master1
+  become: yes
+  roles:
+    - master_secundarios
+
+- name: Configurar nodos worker
+  hosts: workers
+  become: yes
+  roles:
+    - worker
+

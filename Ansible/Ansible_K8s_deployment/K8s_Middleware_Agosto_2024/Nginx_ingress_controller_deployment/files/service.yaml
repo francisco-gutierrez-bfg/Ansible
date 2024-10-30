@@ -1,0 +1,25 @@
+# Configuración de Cluster Kubernetes con Ansible
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+
+---
+- hosts: local
+  tasks:
+    - name: Create NGINX Ingress Namespace
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', 'files/namespace.yaml') }}"
+    
+    - name: Apply RBAC for NGINX Ingress
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', 'files/rbac.yaml') }}"
+    
+    - name: Deploy NGINX Ingress Controller
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', 'files/deployment.yaml') }}"
+    
+    - name: Expose NGINX Ingress Controller as LoadBalancer
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', 'files/service.yaml') }}"

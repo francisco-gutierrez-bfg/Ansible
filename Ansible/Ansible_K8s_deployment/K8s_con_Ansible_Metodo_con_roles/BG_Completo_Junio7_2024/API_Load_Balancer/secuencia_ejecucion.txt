@@ -1,0 +1,22 @@
+Cree y aplique los APIs que sean necesarios segun su requerimientos:
+--------------------------------------------------------------------
+kubectl apply -f api1.yaml
+kubectl apply -f api1-service.yaml
+
+kubectl apply -f api2.yaml
+kubectl apply -f api2-service.yaml
+
+kubectl apply -f api3.yaml
+kubectl apply -f api3-service.yaml
+.
+.
+.
+
+
+Aplique la condiguracion de ingress:
+------------------------------------
+kubectl apply -f ingress.yaml
+
+En caso de requerir HTTPS, ejecute el ingress que hace referencia a la instancia de letsencrypt
+-----------------------------------------------------------------------------------------------
+kubectl apply -f api_ingress_https.yaml

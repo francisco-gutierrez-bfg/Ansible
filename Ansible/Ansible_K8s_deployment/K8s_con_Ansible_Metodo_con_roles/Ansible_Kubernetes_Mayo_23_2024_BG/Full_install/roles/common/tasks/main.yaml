@@ -1,0 +1,82 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+- name: Instalar paquetes requeridos
+  yum:
+    name:
+      - firewalld
+      - iptables-services
+      - ntp
+      - wget
+      - curl
+      - containerd.io
+    state: present
+
+- name: HAbilitar e iniciar firewalld
+  systemd:
+    name: firewalld
+    enabled: yes
+    state: started
+
+- name: Abrir puertos requeridos por Kubernetes
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+  with_items:
+    - 6443/tcp  # Kubernetes API server
+    - 2379-2380/tcp  # etcd server client API
+    - 10250/tcp  # Kubelet API
+    - 10251/tcp  # kube-scheduler
+    - 10252/tcp  # kube-controller-manager
+
+- name: Permitir IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: yes
+
+- name: Configurar sysctl para Kubernetes networking
+  sysctl:
+    name: "{{ item }}"
+    value: '1'
+    state: present
+    reload: yes
+  with_items:
+    - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-ip6tables
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Remover swap en archivo fstab
+  mount:
+    name: none
+    fstype: swap
+    state: absent
+
+- name: Cargar modulo br_netfilter
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Garantiza qure el modulo br_netfilter esta cargado
+  lineinfile:
+    path: /etc/modules-load.d/k8s.conf
+    line: "br_netfilter"
+
+- name: Configurar containerd
+  copy:
+    dest: /etc/containerd/config.toml
+    content: |
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+        runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+        SystemdCgroup = true
+  notify: Restart containerd
+
+- name: Reiniciar containerd
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: yes

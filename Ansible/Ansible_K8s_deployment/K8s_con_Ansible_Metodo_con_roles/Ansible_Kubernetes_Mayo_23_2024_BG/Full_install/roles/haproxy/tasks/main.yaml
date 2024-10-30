@@ -1,0 +1,22 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+- name: Instalar HAProxy
+  yum:
+    name: haproxy
+    state: present
+
+- name: Configurar HAProxy
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+  notify: Restart HAProxy
+
+- name: Iniciar y habilitar HAProxy
+  systemd:
+    name: haproxy
+    state: started
+    enabled: yes
+
+- name: Reiniciar HAProxy
+  systemd:
+    name: haproxy
+    state: restarted

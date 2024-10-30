@@ -1,0 +1,8 @@
+- name: Initialize Kubernetes master node
+  shell: kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml
+  args:
+    creates: /etc/kubernetes/admin.conf
+  notify:
+    - Copy kubeconfig file
+    - Generate and store join command
+  when: kubeadm_role == 'master'

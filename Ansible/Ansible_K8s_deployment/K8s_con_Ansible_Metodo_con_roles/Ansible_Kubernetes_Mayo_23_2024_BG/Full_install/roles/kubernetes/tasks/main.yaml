@@ -1,0 +1,57 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+- name: Instalar Paquetes de Kubernetes
+  yum:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+
+- name: Enable and start kubelet
+  systemd:
+    name: kubelet
+    state: started
+    enabled: yes
+
+- name: Iniciar Kubernetes master
+  command: kubeadm init --control-plane-endpoint "172.16.1.98:8443" --upload-certs
+  register: kubeadm_init
+  when: inventory_hostname == 'master1'
+
+- name: Configurar kubeconfig para root
+  copy:
+    dest: /root/.kube/config
+    content: "{{ lookup('file', '/etc/kubernetes/admin.conf') }}"
+  when: inventory_hostname == 'master1'
+
+- name: Generar comando para los nodos master
+  command: kubeadm token create --print-join-command
+  register: join_command
+  when: inventory_hostname == 'master1'
+
+- name: Guardar el comando join en archivo ejecutable
+  copy:
+    dest: /root/join_command.sh
+    content: "{{ join_command.stdout }}"
+  when: inventory_hostname == 'master1'
+
+- name: Copiar comando join a otros nodos master
+  fetch:
+    src: /root/join_command.sh
+    dest: /tmp/join_command.sh
+    flat: yes
+  when: inventory_hostname == 'master1'
+
+- name: Distribuir comando join a otros nodos master
+  copy:
+    src: /tmp/join_command.sh
+    dest: /root/join_command.sh
+  when: inventory_hostname != 'master1'
+
+- name: Unir otros nodos masters al cluster
+  command: bash /root/join_command.sh --control-plane --certificate-key {{ lookup('file', '/etc/kubernetes/pki/tls.crt') }}
+  when: inventory_hostname != 'master1'
+
+- name: Unir nodos worker al cluster
+  command: bash /root/join_command.sh
+  when: "'worker' in group_names"

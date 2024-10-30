@@ -1,0 +1,166 @@
+---
+- name: Configuración de nodos Kubernetes
+  hosts: all
+  become: yes
+
+  tasks:
+    # Tareas comunes a todos los nodos
+    - name: Set SELinux to permissive mode
+      command: setenforce 0
+      ignore_errors: true
+
+    - name: Disable SELinux
+      replace:
+        path: /etc/selinux/config
+        regexp: '^SELINUX=enforcing'
+        replace: 'SELINUX=permissive'
+
+    - name: Disable swap
+      command: swapoff -a
+
+    - name: Comment out swap partition in /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^(/dev/mapper/.*|UUID=.*)\\s+swap\\s'
+        replace: '#\\1 swap'
+
+    - name: Enable br_netfilter module
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Ensure net.bridge.bridge-nf-call-iptables is set to 1
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Ensure net.ipv4.ip_forward is set to 1
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+
+    - name: Ensure firewalld is disabled
+      systemd:
+        name: firewalld
+        state: stopped
+        enabled: no
+
+    - name: Remove existing Kubernetes configuration
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+        - /etc/kubernetes/manifests/kube-controller-manager.yaml
+        - /etc/kubernetes/manifests/kube-scheduler.yaml
+        - /etc/kubernetes/manifests/etcd.yaml
+        - /var/lib/etcd
+
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+    - name: Enable kubelet service
+      systemd:
+        name: kubelet
+        enabled: yes
+
+    - name: Start kubelet service
+      systemd:
+        name: kubelet
+        state: started
+
+    - name: Allow necessary Kubernetes ports through the firewall
+      firewalld:
+        port: "{{ item }}"
+        state: enabled
+        permanent: yes
+      with_items:
+        - 6443/tcp
+        - 2379-2380/tcp
+        - 10250-10252/tcp
+        - 10255/tcp
+      notify: reload firewalld
+
+    - name: Configure kubelet to use correct pause image version
+      lineinfile:
+        path: /etc/default/kubelet
+        regexp: '^(\s*KUBELET_EXTRA_ARGS\s*=).*$'
+        line: 'KUBELET_EXTRA_ARGS=--container-runtime=remote --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --image-pull-progress-deadline=2m --kubelet-cgroups=/systemd/system.slice --runtime-request-timeout=15m --cgroup-driver=systemd'
+
+  handlers:
+    - name: reload firewalld
+      service:
+        name: firewalld
+        state: reloaded
+
+- name: Configuración nodo maestro principal
+  hosts: master1
+  become: yes
+  tasks:
+    - name: Initialize Kubernetes cluster
+      command: kubeadm init --control-plane-endpoint "192.168.20.35:8443" --upload-certs --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=all
+      register: kubeadm_init
+      failed_when: "'timed out waiting for the condition' in kubeadm_init.stderr"
+      changed_when: "'timed out waiting for the condition' not in kubeadm_init.stderr"
+
+    - name: Save kubeadm join command
+      shell: |
+        kubeadm token create --print-join-command > /joincluster.sh
+      args:
+        creates: /joincluster.sh
+
+    - name: Create .kube directory
+      file:
+        path: /root/.kube
+        state: directory
+        mode: 0755
+
+    - name: Copy admin.conf to user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+
+    - name: Set KUBECONFIG environment variable
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export KUBECONFIG=/root/.kube/config'
+        create: yes
+
+- name: Configuración nodos maestros secundarios
+  hosts: masters:!master1
+  become: yes
+  tasks:
+    - name: Get join command from master1
+      shell: cat /joincluster.sh
+      register: join_command
+      delegate_to: master1
+
+    - name: Join node to the Kubernetes cluster
+      command: "{{ join_command.stdout }} --ignore-preflight-errors=all"
+
+- name: Configuración nodos de trabajo
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Get join command from master1
+      shell: cat /joincluster.sh
+      register: join_command
+      delegate_to: master1
+
+    - name: Join node to the Kubernetes cluster
+      command: "{{ join_command.stdout }} --ignore-preflight-errors=all"
+
+  handlers:
+    - name: reload firewalld
+      service:
+        name: firewalld
+        state: reloaded
+

@@ -1,0 +1,8 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+- include_tasks: instalar_dependencias.yml
+- include_tasks: configurar_containerd.yml
+- include_tasks: configurar_firewalld.yml
+- include_tasks: configurar_haproxy.yml
+- include_tasks: configurar_keepalived.yml
+- include_tasks: configurar_kubernetes.yml
+- include_tasks: configurar_metallb.yml

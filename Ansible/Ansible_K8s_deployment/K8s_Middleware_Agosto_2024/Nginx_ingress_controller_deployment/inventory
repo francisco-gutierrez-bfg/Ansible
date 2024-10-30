@@ -1,0 +1,20 @@
+[masters]
+master1 ansible_host=172.16.1.xx
+master2 ansible_host=172.16.1.xx
+master3 ansible_host=172.16.1.xx
+
+[workers]
+worker1 ansible_host=172.16.1.xx
+worker2 ansible_host=172.16.1.xx
+worker3 ansible_host=172.16.1.xx
+worker4 ansible_host=172.16.1.xx
+worker5 ansible_host=172.16.1.xx
+worker6 ansible_host=172.16.1.xx
+worker7 ansible_host=172.16.1.xx
+worker8 ansible_host=172.16.1.xx
+
+[all:vars]
+ansible_user=root
+virtual_ip=172.16.1.xx
+kube_version=1.29
+containerd_version=1.6.6

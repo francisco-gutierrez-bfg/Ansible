@@ -1,0 +1,9 @@
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+---
+- name: Desplegar Nginx como balanceador de carga en los nodos worker
+  hosts: workers
+  become: yes
+  gather_facts: yes
+  roles:
+    - nginx
+

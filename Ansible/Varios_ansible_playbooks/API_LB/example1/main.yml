@@ -1,0 +1,39 @@
+---
+- name: Deploy API Load Balancer to Kubernetes
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Create API1 Deployment
+      k8s:
+        state: present
+        definition: "{{ lookup('template', './templates/api1-deployment.yaml.j2') }}"
+      register: deploy_api1
+
+    - name: Create API1 Service
+      k8s:
+        state: present
+        definition: "{{ lookup('template', './templates/api1-service.yaml.j2') }}"
+
+    - name: Create API2 Deployment
+      k8s:
+        state: present
+        definition: "{{ lookup('template', './templates/api2-deployment.yaml.j2') }}"
+      register: deploy_api2
+
+    - name: Create API2 Service
+      k8s:
+        state: present
+        definition: "{{ lookup('template', './templates/api2-service.yaml.j2') }}"
+
+    - name: Create API3 Deployment
+      k8s:
+        state: present
+        definition: "{{ lookup('template', './templates/api3-deployment.yaml.j2') }}"
+      register: deploy_api3
+
+    - name: Create API3 Service
+      k8s:
+        state: present
+        definition: "{{ lookup('template', './templates/api3-service.yaml.j2') }}"
+

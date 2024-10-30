@@ -1,0 +1,7 @@
+# Autor: Francisco Javiuer Gutierrez | Unix/Linux Architect & Cloud Engineer
+- hosts: all
+  become: yes
+  vars_files:
+    - roles/kubernetes_cluster/vars/main.yml
+  roles:
+    - kubernetes_cluster

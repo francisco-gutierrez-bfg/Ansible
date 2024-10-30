@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api3
+  template:
+    metadata:
+      labels:
+        app: api3
+    spec:
+      containers:
+      - name: api3
+        image: myregistry/api3:latest
+        ports:
+        - containerPort: 80

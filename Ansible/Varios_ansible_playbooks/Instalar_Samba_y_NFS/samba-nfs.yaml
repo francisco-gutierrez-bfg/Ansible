@@ -1,0 +1,42 @@
+---
+- name: Playbook para instalar Samba y NFS, y crear usuarios
+  hosts: dev
+  become: yes
+
+  vars:
+    users:
+      - username: user1
+        password: password1
+      - username: user2
+        password: password2
+
+  tasks:
+    - name: Instalar paquetes necesarios
+      yum:
+        name:
+          - samba
+          - nfs-utils
+        state: present
+
+    - name: Iniciar y habilitar servicios de Samba
+      systemd:
+        name: smb
+        enabled: yes
+        state: started
+
+    - name: Iniciar y habilitar servicios de NFS
+      systemd:
+        name: nfs-server
+        enabled: yes
+        state: started
+
+    - name: Crear usuarios
+      user:
+        name: "{{ item.username }}"
+        state: present
+        create_home: yes
+      loop: "{{ users }}"
+
+    - name: Configurar contraseña de usuarios
+      command: echo "{{ item.username }}:{{ item.password }}" | chpasswd
+      loop: "{{ users }}"

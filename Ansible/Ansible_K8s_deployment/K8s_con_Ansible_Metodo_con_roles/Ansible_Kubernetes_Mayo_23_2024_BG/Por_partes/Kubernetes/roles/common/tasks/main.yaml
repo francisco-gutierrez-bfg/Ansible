@@ -1,0 +1,35 @@
+- name: Install required packages
+  yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+      - containerd.io
+      - kubectl
+      - kubelet
+      - kubeadm
+    state: present
+
+- name: Configure Containerd
+  copy:
+    src: ../files/containerd.config.toml
+    dest: /etc/containerd/config.toml
+
+- name: Enable and start Containerd
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+
+- name: Enable ip forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Configure Kubernetes Yum repository
+  copy:
+    src: ../files/kubernetes.repo
+    dest: /etc/yum.repos.d/kubernetes.repo
