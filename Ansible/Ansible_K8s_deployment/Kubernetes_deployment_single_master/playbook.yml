@@ -1,0 +1,180 @@
+---
+- hosts: all
+  become: yes
+  vars:
+    kube_version: "1.30"  # Ajustar a la versión deseada
+    containerd_version: "1.7.4"
+    flannel_version: "v0.22.1"
+    metallb_version: "v0.14.8"
+    metallb_ip: "192.168.20.60-192.168.20.70"
+
+  tasks:
+    - name: Deshabilitar SELinux permanentemente
+      shell: |
+        setenforce 0
+        sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
+
+    - name: Deshabilitar firewalld permanentemente
+      service:
+        name: firewalld
+        state: stopped
+        enabled: no
+
+    - name: Deshabilitar swap permanentemente
+      shell: |
+        swapoff -a
+        sed -i '/swap/d' /etc/fstab
+
+    - name: Cargar módulos del kernel necesarios
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - br_netfilter
+        - overlay
+
+    - name: Configurar parámetros de sysctl para Kubernetes networking
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+        state: present
+        reload: yes
+      with_items:
+        - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { key: "net.ipv4.ip_forward", value: "1" }
+
+    - name: Verificar configuración de sysctl
+      command: sysctl -p
+
+    - name: Agregar repositorio de Kubernetes
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes Repository
+        baseurl: https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/rpm/
+        gpgcheck: yes
+        enabled: yes
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/rpm/repodata/repomd.xml.key
+
+    - name: Instalar dependencias necesarias
+      dnf:
+        name:
+          - conntrack
+          - ipvsadm
+          - ipset
+          - jq
+          - socat
+          - ebtables
+          - ethtool
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: latest
+        update_cache: yes
+
+    - name: Configurar kubelet para usar containerd como el runtime
+      copy:
+        dest: /etc/sysconfig/kubelet
+        content: |
+          KUBELET_EXTRA_ARGS="--container-runtime=remote --container-runtime-endpoint=/run/containerd/containerd.sock"
+        
+    - name: Reiniciar y habilitar kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        enabled: yes
+
+    - name: Agregar repositorio oficial de Docker
+      shell: |
+        dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        dnf makecache
+
+    - name: Configurar containerd
+      block:
+        - name: Instalar containerd
+          dnf:
+            name: "containerd.io"
+            #name: "containerd.io-{{ containerd_version }}"
+            state: present
+
+        - name: Crear archivo de configuración para containerd
+          shell: |
+            mkdir -p /etc/containerd
+            containerd config default > /etc/containerd/config.toml
+            sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+        - name: Reiniciar y habilitar containerd
+          systemd:
+            name: containerd
+            state: restarted
+            enabled: yes
+
+    - name: Inicializar el nodo master (solo en master)
+      when: "'masters' in group_names"
+      shell: |
+        kubeadm init --cri-socket unix:///run/containerd/containerd.sock --pod-network-cidr=10.244.0.0/16
+
+    - name: Configurar kubectl para el usuario root (solo en master)
+      when: "'masters' in group_names"
+      shell: |
+        mkdir -p $HOME/.kube
+        cp /etc/kubernetes/admin.conf $HOME/.kube/config
+        chown $(id -u):$(id -g) $HOME/.kube/config
+
+    - name: Generar token para unir workers (solo en master)
+      when: "'masters' in group_names"
+      shell: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Unir nodos workers al clúster
+      when: "'workers' in group_names"
+      shell: "{{ hostvars[groups['master'][0]].join_command.stdout }}"
+
+    - name: Instalar Flannel CNI
+      when: "'masters' in group_names"
+      shell: kubectl apply -f https://github.com/flannel-io/flannel/releases/download/{{ flannel_version }}/kube-flannel.yml
+
+    - name: Instalar MetalLB
+      when: "'masters' in group_names"
+      block:
+        - name: Crear namespace para MetalLB
+          shell: kubectl create namespace metallb-system || true
+
+        - name: Instalar MetalLB
+          shell: kubectl apply -f https://github.com/metallb/metallb/releases/download/{{ metallb_version }}/metallb.yaml
+
+        - name: Eliminar posibles conflictos con L2Advertisement
+          shell: kubectl delete ValidatingWebhookConfiguration validating-webhook-configuration
+
+        - name: Configurar MetalLB
+          copy:
+            dest: /tmp/metallb-config.yaml
+            content: |
+              apiVersion: metallb.io/v1beta1
+              kind: IPAddressPool
+              metadata:
+                name: default
+                namespace: metallb-system
+              spec:
+                addresses:
+                - {{ metallb_ip }}
+              ---
+              apiVersion: metallb.io/v1beta1
+              kind: L2Advertisement
+              metadata:
+                name: l2-advertisement
+                namespace: metallb-system
+              spec:
+                ipAddressPools:
+                - default
+          notify: Apply MetalLB configuration
+
+    - name: Instalar Ingress NGINX
+      when: "'masters' in group_names"
+      shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+
+  handlers:
+    - name: Apply MetalLB configuration
+      shell: kubectl apply -f /tmp/metallb-config.yaml
+
