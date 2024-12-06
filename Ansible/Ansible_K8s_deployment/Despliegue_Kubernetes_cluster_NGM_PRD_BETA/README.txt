@@ -1,3 +1,6 @@
+# Configuración de Cluster Kubernetes con Ansible
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+
 Documentación para Implementar y Desplegar Playbook de Kubernetes con Ansible
 
 Introducción
@@ -213,6 +216,56 @@ El controlador Ingress de NGINX permite gestionar el acceso HTTP y HTTPS a las a
 
   Objetivo: Instalar y configurar NGINX como controlador Ingress para gestionar las solicitudes entrantes.
 
+5. Limpieza de configuraciones (Limpiar_Configuracion_K8s/limpiar_kubernetes)
+Este playbook se ha creado con el fin de limpiar configuraciones en los nodos y poder realizar una nueva configuración.
+
+- name: Limpieza y reset de configuración Kubernetes 
+  hosts: all
+  become: yes
+  tasks:
+
+    - name: Verificar que el servicio firewalld se encuentre habilitado
+      systemd:
+        name: firewalld
+        state: stopped
+        enabled: no
+
+    - name: Detener servicio kubelet
+      systemd:
+        name: kubelet
+        enabled: no
+
+    - name: Detener servicio containerd
+      systemd:
+        name: containerd
+        enabled: no
+
+    - name: Ejecutar kubeadm reset con la opción --force
+      command: kubeadm reset --force
+      ignore_errors: yes
+
+    - name: Remover configuraciones existentes de Kubernetes (en caso de reconfiguración)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes/*
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+        - /etc/kubernetes/manifests/kube-controller-manager.yaml
+        - /etc/kubernetes/manifests/kube-scheduler.yaml
+        - /etc/kubernetes/manifests/etcd.yaml
+        - /var/lib/etcd
+        - /var/lib/kubelet
+        - /joincluster_master.sh
+        - /joincluster_worker.sh
+
+    - name: Desisntalar Kubernetes y Containerd
+      shell: |
+        dnf remove kubeadm kubelet containerd -y
+
+Objetivo: Reset de configuraciones y limpieza de paquetes.
+
+
 Comandos para Aplicar los Playbooks
 Para aplicar los playbook de Ansible, puede seguir estos pasos:
 
@@ -220,10 +273,13 @@ Configura tu inventario de Ansible para que contenga los nodos masters y workers
 Ejecute el playbook utilizando el siguiente comando:
 
 Para despliegue de Kubernetes:
- ansible-playbook -i inventario.ini playbook.yml 
+ ansible-playbook -i inventario k8s.yml 
 
 Para despliegue de MetalLB:
- ansible-playbook -i inventario.ini metallb.yml
+ ansible-playbook -i inventario metallb.yml
+
+Para limpieza de configuraciones y paquetes:
+ ansible-playbook -i inventario limpiar_kubernetes.yml
 
 Estos comandos aplicarán los playbook en los nodos definidos en el archivo inventario
 

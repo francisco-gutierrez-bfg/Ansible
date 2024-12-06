@@ -1,3 +1,6 @@
+# Configuración de Cluster Kubernetes con Ansible
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
+
 - name: Limpieza y reset de configuración Kubernetes 
   hosts: all
   become: yes

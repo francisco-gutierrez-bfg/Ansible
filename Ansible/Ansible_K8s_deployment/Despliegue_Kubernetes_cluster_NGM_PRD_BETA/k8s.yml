@@ -1,10 +1,12 @@
+# Configuración de Cluster Kubernetes con Ansible
+# Autor: Francisco Javier Gutierrez | Unix/Linux Architect & Cloud Engineer
 ---
 - hosts: all
   become: yes
   vars:
     kube_version: "1.30"  # Ajustar a la versión deseada
-    containerd_version: "1.7.4"
-    flannel_version: "v0.22.1"
+    containerd_version: "1.7.4" # Ajustar a la versión deseada
+    flannel_version: "v0.22.1" # Ajustar a la versión deseada
 
   tasks:
     - name: Deshabilitar SELinux permanentemente
@@ -74,7 +76,7 @@
 
     - name: Configurar kubelet para utilizar configuración correcta
       block:
-        - name: Ensure kubelet config file contains required parameters
+        - name: Asegurarse de que el archivo de configuración de kubelet contenga los parámetros necesarios
           blockinfile:
             path: /var/lib/kubelet/config.yaml
             block: |
@@ -86,7 +88,7 @@
             create: yes
             marker: "# {mark} ANSIBLE MANAGED BLOCK - kubelet configuration"
 
-        - name: Remove deprecated flags from KUBELET_EXTRA_ARGS
+        - name: Remover flags deprecados en KUBELET_EXTRA_ARGS
           lineinfile:
             path: /etc/sysconfig/kubelet
             regexp: '^(\s*KUBELET_EXTRA_ARGS\s*=).*$'
